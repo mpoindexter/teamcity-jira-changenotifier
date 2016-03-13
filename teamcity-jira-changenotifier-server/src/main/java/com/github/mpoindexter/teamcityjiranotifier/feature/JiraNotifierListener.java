@@ -18,7 +18,6 @@ package com.github.mpoindexter.teamcityjiranotifier.feature;
 
 import jetbrains.buildServer.issueTracker.Issue;
 import jetbrains.buildServer.issueTracker.IssueProvider;
-import jetbrains.buildServer.messages.Status;
 import jetbrains.buildServer.serverSide.*;
 import jetbrains.buildServer.serverSide.executors.ExecutorServices;
 import jetbrains.buildServer.util.EventDispatcher;
