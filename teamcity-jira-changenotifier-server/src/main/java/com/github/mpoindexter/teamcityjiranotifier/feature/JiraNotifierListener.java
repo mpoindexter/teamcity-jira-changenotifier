@@ -28,8 +28,11 @@ import net.rcarz.jiraclient.BasicCredentials;
 import net.rcarz.jiraclient.JiraClient;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 
@@ -76,15 +79,30 @@ public class JiraNotifierListener {
                 continue;
             }
 
-            List<SVcsModification> changes;
+            List<SVcsModification> changes = new ArrayList<SVcsModification>();
             if (JiraNotifierSettingsConstants.ISSUE_SELECTION_POLICY_SINCE_LAST_SUCCESS.equals(params.get(JiraNotifierSettingsConstants.SETTING_ISSUE_SELECTION_POLICY))) {
-                changes = build.getChanges(SelectPrevBuildPolicy.SINCE_LAST_SUCCESSFULLY_FINISHED_BUILD, true);
+                changes.addAll(build.getChanges(SelectPrevBuildPolicy.SINCE_LAST_SUCCESSFULLY_FINISHED_BUILD, true));
             } else if (JiraNotifierSettingsConstants.ISSUE_SELECTION_POLICY_LAST_BUILD.equals(params.get(JiraNotifierSettingsConstants.SETTING_ISSUE_SELECTION_POLICY))) {
-                changes = build.getChanges(SelectPrevBuildPolicy.SINCE_LAST_BUILD, true);
+                changes.addAll(build.getChanges(SelectPrevBuildPolicy.SINCE_LAST_BUILD, true));
             } else {
                 continue;
             }
 
+            BuildPromotion promotion = build.getBuildPromotion();
+            if (promotion != null) {
+                List<? extends BuildPromotion> deps = promotion.getAllDependencies();
+                if (deps != null) {
+                    for (BuildPromotion dep : deps) {
+                        if (JiraNotifierSettingsConstants.ISSUE_SELECTION_POLICY_SINCE_LAST_SUCCESS.equals(params.get(JiraNotifierSettingsConstants.SETTING_ISSUE_SELECTION_POLICY))) {
+                            changes.addAll(dep.getChanges(SelectPrevBuildPolicy.SINCE_LAST_SUCCESSFULLY_FINISHED_BUILD, true));
+                        } else if (JiraNotifierSettingsConstants.ISSUE_SELECTION_POLICY_LAST_BUILD.equals(params.get(JiraNotifierSettingsConstants.SETTING_ISSUE_SELECTION_POLICY))) {
+                            changes.addAll(dep.getChanges(SelectPrevBuildPolicy.SINCE_LAST_BUILD, true));
+                        }
+                    }
+                }
+            }
+
+            Set<String> updatedIssueKeys = new HashSet<String>();
             for (SVcsModification change : changes) {
                 for (Issue issue : change.getRelatedIssues()) {
                     IssueProvider provider = issue.getProvider();
@@ -101,7 +119,10 @@ public class JiraNotifierListener {
                     boolean transition = !StringUtil.isEmptyOrSpaces(params.get(JiraNotifierSettingsConstants.SETTING_TRANSITION));
                     JiraNotifierTransitionMap transitionMap = JiraNotifierTransitionMap.parse(params.get(JiraNotifierSettingsConstants.SETTING_TRANSITION_MAP));
 
-                    executor.submit(new UpdateIssueTask(url, user, password, issueKey, build, comment, transition, transitionMap));
+                    if (!updatedIssueKeys.contains(issueKey)) {
+                        updatedIssueKeys.add(issueKey);
+                        executor.submit(new UpdateIssueTask(url, user, password, issueKey, build, comment, transition, transitionMap));
+                    }
                 }
             }
         }
